@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Dev Agent</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=4">
+  <link rel="stylesheet" href="./styles.css?v=5">
 </head>
 <body>
   <main class="app-shell">
@@ -54,7 +54,7 @@
           </select>
         </div>
         <div>
-          <label for="budgetInput">Orçamento de referência</label>
+          <label for="budgetInput">Limite estimado da tarefa</label>
           <div class="money-input"><span>R$</span><input id="budgetInput" inputmode="decimal" value="5,00"></div>
         </div>
       </div>
@@ -73,7 +73,7 @@
         <div><span>Tarefas</span><strong>0</strong></div>
         <div><span>Média</span><strong>R$ 0,00</strong></div>
       </div>
-      <p class="helper" style="margin-top:10px">O valor mostrado é uma estimativa baseada em tokens e no custo mínimo do sandbox; a cobrança real da OpenAI pode variar um pouco.</p>
+      <p class="helper" style="margin-top:10px">Os valores são estimativas. Se a estimativa disponível ultrapassar o limite da tarefa, o agente recebe um pedido de cancelamento.</p>
     </section>
 
     <section class="card history-card">
@@ -99,6 +99,6 @@
     <p class="helper">Toda publicação exige sua aprovação. O agente trabalha primeiro numa cópia isolada do repositório.</p>
   </dialog>
 
-  <script src="./app.js?v=4" defer></script>
+  <script src="./app.js?v=5" defer></script>
 </body>
 </html>
