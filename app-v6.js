@@ -8,6 +8,9 @@ let activeResult = null;
 let activeMeta = null;
 let pollTimer = null;
 let idleWithoutResultPolls = 0;
+let consecutiveStatusFailures = 0;
+let remoteActivityConfirmed = false;
+window.devAgentRemoteActivity = false;
 
 const $ = selector => document.querySelector(selector);
 const projectSelect = $('#projectSelect');
@@ -77,6 +80,20 @@ function setBusy(busy) {
   budgetInput.disabled = busy;
 }
 
+function setRemoteActivity(active) {
+  remoteActivityConfirmed = Boolean(active);
+  window.devAgentRemoteActivity = remoteActivityConfirmed;
+  document.dispatchEvent(new CustomEvent('devagent:state'));
+}
+
+function isTerminalStatus(status) {
+  return ['idle', 'completed', 'complete', 'succeeded', 'finished', 'cancelled', 'canceled', 'expired', 'deleted', 'not_found', 'failed', 'error'].includes(String(status || '').toLowerCase());
+}
+
+function isSuccessfulTerminalStatus(status) {
+  return ['idle', 'completed', 'complete', 'succeeded', 'finished'].includes(String(status || '').toLowerCase());
+}
+
 function getHistory() {
   try {
     const data = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
@@ -133,7 +150,7 @@ function renderHistory() {
     desc.textContent = `${item.status || ''}${item.task ? ' · ' + item.task : ''}`;
     left.append(title, desc);
     const cost = document.createElement('b');
-    cost.textContent = brl(item.costBrl || 0);
+    cost.textContent = Number(item.costBrl) > 0 ? brl(item.costBrl) : (item.costPending ? 'calculando' : '—');
     row.append(left, cost);
     list.appendChild(row);
   }
@@ -157,6 +174,8 @@ function clearActive() {
   activeResult = null;
   activeMeta = null;
   idleWithoutResultPolls = 0;
+  consecutiveStatusFailures = 0;
+  setRemoteActivity(false);
   localStorage.removeItem(ACTIVE_KEY);
 }
 
@@ -252,14 +271,28 @@ function showResult({ badge, summary, meta = [], files = [], visuals = null, pub
   $('#publishButton').hidden = !publish;
   $('#discardButton').hidden = !discard;
   $('#cancelButton').hidden = !cancel;
+  document.dispatchEvent(new CustomEvent('devagent:state'));
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const controller = new AbortController();
+  const timeoutMs = options.timeoutMs || (path.startsWith('/agent/status') ? 12_000 : 15_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
     cache: 'no-store',
     ...options,
+    signal: controller.signal,
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
   });
+  } catch (cause) {
+    const error = new Error(cause?.name === 'AbortError' ? 'A consulta ao backend demorou demais.' : (cause?.message || 'Não foi possível conectar ao backend.'));
+    error.cause = cause;
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
     const error = new Error(data.error || `Erro ${response.status}`);
@@ -291,27 +324,28 @@ async function selectedImages() {
 
 async function connectBackend() {
   setStatus('Conectando', 'Verificando OpenAI, GitHub e execução remota…', 'pending');
-  try {
-    const [health, repos] = await Promise.all([
-      api('/health'),
-      api('/repos'),
-      api('/setup-vault', { method: 'POST', body: '{}' })
-    ]);
+  const saved = getSavedActive();
+  if (saved) resumeSavedSession(saved);
+  else runHelper.textContent = 'Descreva a mudança e pode fechar o app depois de iniciar. A execução continua no servidor; ao voltar, o resultado é recuperado.';
+
+  api('/health').then(health => {
     if (!health.openaiKeyConfigured || !health.githubTokenConfigured) throw new Error('Credenciais incompletas.');
+    setStatus('Tudo conectado', `Backend v${health.version || '?'} pronto. As tarefas continuam remotamente com o PWA fechado.`, 'ready');
+  }).catch(error => {
+    setStatus('Falha de conexão', error.message || 'Não foi possível falar com o backend.', 'error');
+    if (!saved) runHelper.textContent = 'Recarregue o app e tente novamente.';
+  });
+
+  api('/repos').then(repos => {
     if (Array.isArray(repos.repos) && repos.repos.length) {
       projects = repos.repos.map(repo => repo.name);
       fillProjects(projectSelect);
       fillProjects(defaultProject);
       applySavedDefault();
     }
-    setStatus('Tudo conectado', `Backend v${health.version || '?'} pronto. As tarefas continuam remotamente com o PWA fechado.`, 'ready');
-    const saved = getSavedActive();
-    if (saved) await resumeSavedSession(saved);
-    else runHelper.textContent = 'Descreva a mudança e pode fechar o app depois de iniciar. A execução continua no servidor; ao voltar, o resultado é recuperado.';
-  } catch (error) {
-    setStatus('Falha de conexão', error.message || 'Não foi possível falar com o backend.', 'error');
-    runHelper.textContent = 'Recarregue o app e tente novamente.';
-  }
+  }).catch(() => {
+    // A lista pode falhar sem impedir a interface nem a recuperação de uma tarefa existente.
+  });
 }
 
 async function resumeSavedSession(saved) {
@@ -322,6 +356,7 @@ async function resumeSavedSession(saved) {
   if (saved.modelMode) modelSelect.value = saved.modelMode;
   if (saved.budgetBrl) budgetInput.value = Number(saved.budgetBrl).toFixed(2).replace('.', ',');
   setBusy(true);
+  setRemoteActivity(false);
   showResult({
     badge: 'Recuperando',
     summary: `A tarefa em ${saved.project || 'seu projeto'} continuou remotamente. Consultando o estado atual…`,
@@ -394,6 +429,11 @@ async function pollStatus(immediate = false) {
 
   try {
     const data = await api(`/agent/status?session_id=${encodeURIComponent(activeSessionId)}`);
+    consecutiveStatusFailures = 0;
+    const normalizedStatus = String(data.status || '').toLowerCase();
+    const resultReady = Boolean(data.resultReady || data.result?.changes || data.result?.summary || data.previewUrl);
+    const remotelyActive = !isTerminalStatus(normalizedStatus);
+    setRemoteActivity(remotelyActive);
     const cost = data.cost?.minimumTotalBrl;
     const meta = [...routingMeta(data.routing || activeMeta?.routing, data.model || activeMeta?.selectedModel)];
     if (activeMeta?.reasoningEffort) meta.push(`raciocínio ${activeMeta.reasoningEffort}`);
@@ -401,18 +441,18 @@ async function pollStatus(immediate = false) {
     if (data.usage?.total_tokens) meta.push(`${Number(data.usage.total_tokens).toLocaleString('pt-BR')} tokens`);
     if (data.visuals?.computerToolCalls) meta.push(`${data.visuals.computerToolCalls} ações visuais`);
 
-    if (data.status === 'failed') {
+    if (normalizedStatus === 'failed' || normalizedStatus === 'error') {
       setBusy(false);
       saveHistoryItem({
         sessionId: activeSessionId, date: new Date().toISOString(), project: data.project || activeMeta?.project,
-        task: activeMeta?.task || taskInput.value.trim(), model: data.model, costBrl: Number(cost || 0), status: 'falhou'
+        task: activeMeta?.task || taskInput.value.trim(), model: data.model, costBrl: Number(cost) > 0 ? Number(cost) : null, costPending: Number(cost) <= 0, status: 'falhou'
       });
       showResult({ badge: data.budgetExceeded ? 'Limite atingido' : 'Falhou', summary: data.error || data.finalText || 'O agente não conseguiu concluir a tarefa.', meta, visuals: data.visuals, discard: true });
       runHelper.textContent = 'Nada foi publicado. Você pode descartar a sessão.';
       return;
     }
 
-    if (data.status === 'idle' && data.resultReady) {
+    if (isSuccessfulTerminalStatus(normalizedStatus) && resultReady) {
       setBusy(false);
       idleWithoutResultPolls = 0;
       activeResult = data;
@@ -424,7 +464,7 @@ async function pollStatus(immediate = false) {
       if (warnings.length) summary += ` Atenção: ${warnings.join('; ')}.`;
       saveHistoryItem({
         sessionId: activeSessionId, date: new Date().toISOString(), project: data.project || activeMeta?.project,
-        task: activeMeta?.task || taskInput.value.trim(), model: data.model, costBrl: Number(cost || 0),
+        task: activeMeta?.task || taskInput.value.trim(), model: data.model, costBrl: Number(cost) > 0 ? Number(cost) : null, costPending: Number(cost) <= 0,
         status: changes.length ? 'aguardando publicação' : 'concluída'
       });
       showResult({
@@ -437,20 +477,22 @@ async function pollStatus(immediate = false) {
       return;
     }
 
-    if (data.status === 'idle' && !data.resultReady) {
+    if (isSuccessfulTerminalStatus(normalizedStatus) && !resultReady) {
       idleWithoutResultPolls += 1;
-      if (idleWithoutResultPolls >= 8) {
+      if (idleWithoutResultPolls >= 3) {
         setBusy(false);
-        showResult({ badge: 'Finalização incompleta', summary: data.finalText || 'O agente terminou, mas não gerou o pacote final de alterações.', meta, visuals: data.visuals, discard: true });
-        runHelper.textContent = 'Nada foi publicado. Descarte a sessão e tente novamente.';
+        saveHistoryItem({ sessionId: activeSessionId, date: new Date().toISOString(), project: data.project || activeMeta?.project, task: activeMeta?.task || taskInput.value.trim(), model: data.model, costBrl: Number(cost) > 0 ? Number(cost) : null, costPending: Number(cost) <= 0, status: 'sessão concluída sem resultado' });
+        showResult({ badge: 'Sessão concluída', summary: data.finalText || 'A sessão remota terminou sem devolver um pacote publicável. Nada foi publicado.', meta, visuals: data.visuals });
+        clearActive();
+        runHelper.textContent = 'A sessão antiga foi removida deste aparelho. Você pode iniciar outra tarefa.';
         return;
       }
     } else idleWithoutResultPolls = 0;
 
     showResult({
-      badge: data.status === 'requires_action' ? 'Liberando navegador' : (data.status === 'idle' ? 'Finalizando' : 'Executando remotamente'),
+      badge: normalizedStatus === 'requires_action' ? 'Liberando navegador' : (isTerminalStatus(normalizedStatus) ? 'Finalizando' : 'Executando remotamente'),
       summary: data.finalText || 'O agente está analisando, editando, testando e, quando útil, conferindo a interface visualmente.',
-      meta, visuals: data.visuals, cancel: data.status !== 'idle'
+      meta, visuals: data.visuals, cancel: !isTerminalStatus(normalizedStatus)
     });
     runHelper.textContent = 'Você pode fechar o PWA. O servidor e o Workflow continuam acompanhando a tarefa.';
     pollTimer = setTimeout(pollStatus, 4000);
@@ -460,6 +502,14 @@ async function pollStatus(immediate = false) {
       clearActive();
       showResult({ badge: 'Sessão encerrada', summary: 'A tarefa anterior não existe mais no servidor.' });
       runHelper.textContent = 'Você pode iniciar outra tarefa.';
+      return;
+    }
+    consecutiveStatusFailures += 1;
+    setRemoteActivity(false);
+    if (consecutiveStatusFailures >= 3) {
+      setBusy(false);
+      showResult({ badge: 'Não foi possível confirmar', summary: 'Não consegui confirmar se a sessão antiga ainda existe. O indicador de atividade foi desligado para não mostrar trabalho que talvez já tenha terminado.', discard: true });
+      runHelper.textContent = 'Tente recuperar novamente ou descarte esta referência local para iniciar outra tarefa.';
       return;
     }
     pollTimer = setTimeout(pollStatus, 7000);
@@ -518,6 +568,7 @@ async function cancelCurrent() {
   if (!activeSessionId || !window.confirm('Cancelar a tarefa atual? Nenhuma alteração será publicada.')) return;
   try { await api('/agent/cancel', { method: 'POST', body: JSON.stringify({ sessionId: activeSessionId }) }); } catch {}
   showResult({ badge: 'Cancelando', summary: 'O pedido de cancelamento foi enviado ao agente remoto.', discard: true });
+  setRemoteActivity(false);
   runHelper.textContent = 'O monitor remoto continuará acompanhando até a sessão parar.';
   pollTimer = setTimeout(() => pollStatus(true), 2500);
 }
