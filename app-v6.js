@@ -10,6 +10,7 @@ let pollTimer = null;
 let idleWithoutResultPolls = 0;
 let consecutiveStatusFailures = 0;
 let remoteActivityConfirmed = false;
+let pollInFlight = false;
 window.devAgentRemoteActivity = false;
 
 const $ = selector => document.querySelector(selector);
@@ -424,8 +425,10 @@ async function runTask() {
 
 async function pollStatus(immediate = false) {
   if (!activeSessionId) return;
+  if (pollInFlight) return;
   clearTimeout(pollTimer);
   if (!immediate && document.visibilityState === 'hidden') return;
+  pollInFlight = true;
 
   try {
     const data = await api(`/agent/status?session_id=${encodeURIComponent(activeSessionId)}`);
@@ -514,6 +517,8 @@ async function pollStatus(immediate = false) {
     }
     pollTimer = setTimeout(pollStatus, 7000);
     runHelper.textContent = `A tarefa continua remotamente. Não consegui atualizar a tela agora: ${error.message || 'erro de conexão'}.`;
+  } finally {
+    pollInFlight = false;
   }
 }
 
