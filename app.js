@@ -1,4 +1,6 @@
 const API_BASE = 'https://pwa-dev-agent-api.viniciusnevez123.workers.dev';
+const ACTIVE_KEY = 'dev-agent-active-session';
+const HISTORY_KEY = 'dev-agent-history';
 
 let projects = [
   'Painel',
@@ -27,7 +29,9 @@ const taskInput = document.querySelector('#taskInput');
 
 let activeSessionId = null;
 let activeResult = null;
+let activeMeta = null;
 let pollTimer = null;
+let idleWithoutResultPolls = 0;
 
 function fillProjects(select) {
   const oldValue = select.value;
@@ -60,6 +64,7 @@ function setBusy(busy) {
   runButton.textContent = busy ? 'Executando…' : 'Executar tarefa';
   projectSelect.disabled = busy;
   modelSelect.disabled = busy;
+  budgetInput.disabled = busy;
 }
 
 function brl(value) {
@@ -75,7 +80,8 @@ function parseBudget() {
 
 function getHistory() {
   try {
-    return JSON.parse(localStorage.getItem('dev-agent-history') || '[]');
+    const parsed = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -83,9 +89,33 @@ function getHistory() {
 
 function saveHistoryItem(item) {
   const history = getHistory();
-  history.unshift(item);
-  localStorage.setItem('dev-agent-history', JSON.stringify(history.slice(0, 100)));
+  const index = history.findIndex(row => row.sessionId === item.sessionId);
+  if (index >= 0) history[index] = { ...history[index], ...item };
+  else history.unshift(item);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 200)));
   renderHistory();
+}
+
+function getSavedActive() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ACTIVE_KEY) || 'null');
+    return parsed && parsed.sessionId ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveActive(meta) {
+  activeMeta = meta;
+  localStorage.setItem(ACTIVE_KEY, JSON.stringify(meta));
+}
+
+function clearActive() {
+  activeSessionId = null;
+  activeResult = null;
+  activeMeta = null;
+  idleWithoutResultPolls = 0;
+  localStorage.removeItem(ACTIVE_KEY);
 }
 
 function renderHistory() {
@@ -118,7 +148,8 @@ function renderHistory() {
     card.appendChild(list);
   }
   list.replaceChildren();
-  for (const item of history.slice(0, 8)) {
+
+  for (const item of history.slice(0, 10)) {
     const row = document.createElement('div');
     row.className = 'history-item';
     const text = document.createElement('div');
@@ -167,6 +198,12 @@ function ensureResultCard() {
   const actions = document.createElement('div');
   actions.className = 'result-actions';
 
+  const cancel = document.createElement('button');
+  cancel.id = 'cancelButton';
+  cancel.className = 'secondary-button';
+  cancel.textContent = 'Cancelar tarefa';
+  cancel.hidden = true;
+
   const discard = document.createElement('button');
   discard.id = 'discardButton';
   discard.className = 'secondary-button';
@@ -178,12 +215,6 @@ function ensureResultCard() {
   publish.className = 'primary-button';
   publish.textContent = 'Publicar no GitHub';
   publish.hidden = true;
-
-  const cancel = document.createElement('button');
-  cancel.id = 'cancelButton';
-  cancel.className = 'secondary-button';
-  cancel.textContent = 'Cancelar tarefa';
-  cancel.hidden = true;
 
   actions.append(cancel, discard, publish);
   card.append(heading, summary, meta, files, actions);
@@ -203,7 +234,7 @@ function showResult({ badge, summary, meta = [], files = [], publish = false, di
 
   const metaNode = document.querySelector('#resultMeta');
   metaNode.replaceChildren();
-  for (const value of meta) {
+  for (const value of meta.filter(Boolean)) {
     const chip = document.createElement('span');
     chip.textContent = value;
     metaNode.appendChild(chip);
@@ -234,6 +265,7 @@ async function api(path, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
     const error = new Error(data.error || `Erro ${response.status}`);
+    error.status = response.status;
     error.data = data;
     throw error;
   }
@@ -258,11 +290,34 @@ async function connectBackend() {
       applySavedDefault();
     }
     setStatus('Tudo conectado', 'OpenAI, GitHub e backend estão prontos.', 'ready');
-    runHelper.textContent = 'Descreva a mudança. O agente trabalha numa cópia e só publica depois da sua aprovação.';
+
+    const saved = getSavedActive();
+    if (saved) {
+      await resumeSavedSession(saved);
+    } else {
+      runHelper.textContent = 'Descreva a mudança. O agente trabalha numa cópia e só publica depois da sua aprovação.';
+    }
   } catch (error) {
     setStatus('Falha de conexão', error.message || 'Não foi possível falar com o backend.', 'error');
     runHelper.textContent = 'Recarregue o app e tente novamente.';
   }
+}
+
+async function resumeSavedSession(saved) {
+  activeSessionId = saved.sessionId;
+  activeMeta = saved;
+  if (saved.project && projects.includes(saved.project)) projectSelect.value = saved.project;
+  if (saved.task) taskInput.value = saved.task;
+  if (saved.modelMode) modelSelect.value = saved.modelMode;
+  if (saved.budgetBrl) budgetInput.value = Number(saved.budgetBrl).toFixed(2).replace('.', ',');
+  setBusy(true);
+  showResult({
+    badge: 'Retomando',
+    summary: `Recuperando a tarefa em ${saved.project || 'seu projeto'}…`,
+    cancel: true
+  });
+  runHelper.textContent = 'Encontrei uma tarefa em andamento e vou continuar acompanhando daqui.';
+  await pollStatus();
 }
 
 function fileToDataUrl(file) {
@@ -293,45 +348,57 @@ async function runTask() {
     taskInput.focus();
     return;
   }
-  if (activeSessionId) return;
+  if (activeSessionId) {
+    runHelper.textContent = 'Já existe uma tarefa ativa. Conclua, cancele ou descarte antes de iniciar outra.';
+    return;
+  }
 
   setBusy(true);
   runHelper.textContent = 'Preparando o ambiente e carregando o repositório…';
   showResult({
     badge: 'Iniciando',
-    summary: 'O agente está preparando uma cópia segura do projeto.',
-    cancel: false
+    summary: 'O agente está preparando uma cópia segura do projeto.'
   });
 
   try {
     const images = await selectedImages();
+    const budgetBrl = parseBudget();
     const started = await api('/agent/start', {
       method: 'POST',
       body: JSON.stringify({
         project: projectSelect.value,
         task,
         model: modelSelect.value,
-        budgetBrl: parseBudget(),
+        budgetBrl,
         images
       })
     });
     activeSessionId = started.sessionId;
     activeResult = null;
+    idleWithoutResultPolls = 0;
+    saveActive({
+      sessionId: started.sessionId,
+      project: started.project,
+      branch: started.branch,
+      task,
+      modelMode: modelSelect.value,
+      selectedModel: started.model,
+      budgetBrl,
+      startedAt: new Date().toISOString()
+    });
+
     showResult({
       badge: 'Executando',
       summary: `Agente trabalhando em ${started.project}.`,
-      meta: [started.model, `orçamento de referência ${brl(started.budgetBrl)}`],
+      meta: [started.model, `orçamento de referência ${brl(budgetBrl)}`],
       cancel: true
     });
-    runHelper.textContent = 'Pode levar alguns minutos. Você pode deixar esta tela aberta.';
+    runHelper.textContent = 'Pode levar alguns minutos. Você pode sair do app; a tarefa será retomada quando voltar.';
     pollStatus();
   } catch (error) {
     setBusy(false);
-    activeSessionId = null;
-    showResult({
-      badge: 'Erro',
-      summary: error.message || 'Não foi possível iniciar a tarefa.'
-    });
+    clearActive();
+    showResult({ badge: 'Erro', summary: error.message || 'Não foi possível iniciar a tarefa.' });
     runHelper.textContent = 'A tarefa não foi iniciada.';
   }
 }
@@ -343,23 +410,34 @@ async function pollStatus() {
   try {
     const data = await api(`/agent/status?session_id=${encodeURIComponent(activeSessionId)}`);
     const cost = data.cost?.minimumTotalBrl;
-    const meta = [data.model || 'modelo automático'];
+    const meta = [data.model || activeMeta?.selectedModel || 'modelo automático'];
     if (Number.isFinite(cost)) meta.push(`custo estimado ≥ ${brl(cost)}`);
     if (data.usage?.total_tokens) meta.push(`${Number(data.usage.total_tokens).toLocaleString('pt-BR')} tokens`);
 
     if (data.status === 'failed') {
       setBusy(false);
+      saveHistoryItem({
+        sessionId: activeSessionId,
+        date: new Date().toISOString(),
+        project: data.project || activeMeta?.project,
+        task: activeMeta?.task || taskInput.value.trim(),
+        model: data.model,
+        costBrl: Number(cost || 0),
+        status: 'falhou'
+      });
       showResult({
         badge: 'Falhou',
         summary: data.error || data.finalText || 'O agente não conseguiu concluir a tarefa.',
-        meta
+        meta,
+        discard: true
       });
-      activeSessionId = null;
+      runHelper.textContent = 'A sessão pode ser descartada. Nenhuma alteração foi publicada.';
       return;
     }
 
     if (data.status === 'idle' && data.resultReady) {
       setBusy(false);
+      idleWithoutResultPolls = 0;
       activeResult = data;
       const changes = data.result?.changes || [];
       const tests = Array.isArray(data.result?.tests) ? data.result.tests : [];
@@ -368,31 +446,45 @@ async function pollStatus() {
       if (tests.length) summary += ` Testes: ${tests.join('; ')}.`;
       if (warnings.length) summary += ` Atenção: ${warnings.join('; ')}.`;
 
-      if (!getHistory().some(item => item.sessionId === activeSessionId)) {
-        saveHistoryItem({
-          sessionId: activeSessionId,
-          date: new Date().toISOString(),
-          project: data.project,
-          task: taskInput.value.trim(),
-          model: data.model,
-          costBrl: Number(data.cost?.minimumTotalBrl || 0),
-          status: 'concluída'
-        });
-      }
+      saveHistoryItem({
+        sessionId: activeSessionId,
+        date: new Date().toISOString(),
+        project: data.project || activeMeta?.project,
+        task: activeMeta?.task || taskInput.value.trim(),
+        model: data.model,
+        costBrl: Number(cost || 0),
+        status: changes.length ? 'aguardando publicação' : 'concluída'
+      });
 
       showResult({
         badge: changes.length ? 'Pronto para revisar' : 'Concluído',
         summary,
         meta: [...meta, `${changes.length} arquivo${changes.length === 1 ? '' : 's'} alterado${changes.length === 1 ? '' : 's'}`],
-        files: changes.slice(0, 30),
+        files: changes.slice(0, 50),
         publish: changes.length > 0,
-        discard: changes.length > 0,
-        cancel: false
+        discard: true
       });
       runHelper.textContent = changes.length
         ? 'Nada foi publicado ainda. Você pode publicar ou descartar as alterações.'
-        : 'O agente terminou sem precisar modificar arquivos.';
+        : 'O agente terminou. Você pode descartar a sessão para liberar o ambiente.';
       return;
+    }
+
+    if (data.status === 'idle' && !data.resultReady) {
+      idleWithoutResultPolls += 1;
+      if (idleWithoutResultPolls >= 8) {
+        setBusy(false);
+        showResult({
+          badge: 'Finalização incompleta',
+          summary: data.finalText || 'O agente terminou, mas não gerou o pacote de alterações esperado.',
+          meta,
+          discard: true
+        });
+        runHelper.textContent = 'Nada foi publicado. Descarte esta sessão e tente novamente com uma instrução mais específica.';
+        return;
+      }
+    } else {
+      idleWithoutResultPolls = 0;
     }
 
     showResult({
@@ -403,6 +495,14 @@ async function pollStatus() {
     });
     pollTimer = setTimeout(pollStatus, 3000);
   } catch (error) {
+    if (error.status === 404) {
+      clearTimeout(pollTimer);
+      setBusy(false);
+      clearActive();
+      showResult({ badge: 'Sessão encerrada', summary: 'A tarefa anterior não existe mais no servidor.' });
+      runHelper.textContent = 'Você pode iniciar uma nova tarefa.';
+      return;
+    }
     pollTimer = setTimeout(pollStatus, 5000);
     runHelper.textContent = `Aguardando resposta do agente… ${error.message || ''}`;
   }
@@ -425,8 +525,18 @@ async function publishCurrent() {
       method: 'POST',
       body: JSON.stringify({ sessionId: activeSessionId })
     });
-
     const costBrl = Number(activeResult.cost?.minimumTotalBrl || 0);
+
+    saveHistoryItem({
+      sessionId: activeSessionId,
+      date: new Date().toISOString(),
+      project: activeResult.project || activeMeta?.project,
+      task: activeMeta?.task || taskInput.value.trim(),
+      model: activeResult.model,
+      costBrl,
+      status: 'publicada',
+      commitSha: published.commitSha || null
+    });
 
     showResult({
       badge: 'Publicado',
@@ -435,11 +545,10 @@ async function publishCurrent() {
         `${published.changedCount || changes.length} arquivos`,
         published.commitSha ? `commit ${published.commitSha.slice(0, 7)}` : '',
         costBrl ? `custo estimado ≥ ${brl(costBrl)}` : ''
-      ].filter(Boolean)
+      ]
     });
     runHelper.textContent = 'Publicado com sucesso. O GitHub Pages pode levar alguns segundos para atualizar.';
-    activeSessionId = null;
-    activeResult = null;
+    clearActive();
     imageInput.value = '';
     attachmentCount.textContent = 'Nenhum anexo';
   } catch (error) {
@@ -450,12 +559,12 @@ async function publishCurrent() {
 }
 
 async function discardCurrent() {
-  if (!activeSessionId || !activeResult) return;
-  const changes = activeResult.result?.changes || [];
-  const ok = window.confirm(
-    `Descartar ${changes.length} arquivo${changes.length === 1 ? '' : 's'} alterado${changes.length === 1 ? '' : 's'}? Nada será publicado.`
-  );
-  if (!ok) return;
+  if (!activeSessionId) return;
+  const changes = activeResult?.result?.changes || [];
+  const message = changes.length
+    ? `Descartar ${changes.length} arquivo${changes.length === 1 ? '' : 's'} alterado${changes.length === 1 ? '' : 's'}? Nada será publicado.`
+    : 'Descartar esta sessão? Nada será publicado.';
+  if (!window.confirm(message)) return;
 
   const button = document.querySelector('#discardButton');
   button.disabled = true;
@@ -466,13 +575,16 @@ async function discardCurrent() {
       method: 'POST',
       body: JSON.stringify({ sessionId: activeSessionId })
     });
+    const history = getHistory();
+    const existing = history.find(item => item.sessionId === activeSessionId);
+    if (existing) saveHistoryItem({ ...existing, status: 'descartada' });
     showResult({
       badge: 'Descartado',
-      summary: 'As alterações foram descartadas e nada foi publicado no GitHub.'
+      summary: 'A sessão foi encerrada e nada foi publicado no GitHub.'
     });
-    runHelper.textContent = 'Sessão encerrada. Você pode executar outra tarefa.';
-    activeSessionId = null;
-    activeResult = null;
+    runHelper.textContent = 'Você pode executar outra tarefa.';
+    clearActive();
+    setBusy(false);
     imageInput.value = '';
     attachmentCount.textContent = 'Nenhum anexo';
   } catch (error) {
@@ -484,19 +596,24 @@ async function discardCurrent() {
 
 async function cancelCurrent() {
   if (!activeSessionId) return;
-  const ok = window.confirm('Cancelar a tarefa atual?');
-  if (!ok) return;
+  if (!window.confirm('Cancelar a tarefa atual? Nenhuma alteração será publicada.')) return;
+
   try {
     await api('/agent/cancel', {
       method: 'POST',
       body: JSON.stringify({ sessionId: activeSessionId })
     });
   } catch {}
+
   clearTimeout(pollTimer);
   setBusy(false);
-  showResult({ badge: 'Cancelada', summary: 'A tarefa foi cancelada.' });
-  activeSessionId = null;
-  activeResult = null;
+  showResult({
+    badge: 'Cancelando',
+    summary: 'O pedido de cancelamento foi enviado. Você pode descartar a sessão quando ela parar.',
+    discard: true
+  });
+  runHelper.textContent = 'Aguardando o agente parar…';
+  setTimeout(pollStatus, 2000);
 }
 
 fillProjects(projectSelect);
