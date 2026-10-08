@@ -38,7 +38,7 @@
     }
 
     if (hasNavigablePreview()) {
-      notice.textContent = 'Prévia navegável disponível. Abra e percorra as telas afetadas antes de publicar.';
+      notice.textContent = 'Abra a prévia e revise antes de publicar.';
       publish.dataset.visualGuard = 'navigable';
     } else if (hasScreenshotPreview()) {
       notice.textContent = 'A prévia navegável não ficou disponível, mas existe uma captura visual final para conferência.';
