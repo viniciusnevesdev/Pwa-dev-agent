@@ -1,5 +1,5 @@
 (() => {
-  const UI_VERSION = '0.8.3';
+  const UI_VERSION = '0.8.4';
 
   function setTextIfChanged(node, value) {
     if (node && node.textContent !== value) node.textContent = value;
