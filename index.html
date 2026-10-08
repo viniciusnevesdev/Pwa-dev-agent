@@ -7,10 +7,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Dev Agent</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=090">
-  <link rel="stylesheet" href="./styles.css?v=090">
-  <link rel="stylesheet" href="./visuals-v6.css?v=090">
-  <link rel="stylesheet" href="./activity-preview-v8.css?v=090">
+  <link rel="manifest" href="./manifest.webmanifest?v=091">
+  <link rel="stylesheet" href="./styles.css?v=091">
+  <link rel="stylesheet" href="./visuals-v6.css?v=091">
+  <link rel="stylesheet" href="./activity-preview-v8.css?v=091">
 </head>
 <body>
   <main class="app-shell">
@@ -19,23 +19,23 @@
         <p class="eyebrow">AGENTE PESSOAL</p>
         <div class="app-title-row">
           <h1>Dev Agent</h1>
-          <span class="app-version" id="appVersion">v0.8.10</span>
+          <span class="app-version" id="appVersion">v0.8.11</span>
         </div>
       </div>
       <button class="icon-button" id="settingsButton" aria-label="Ajustes">⚙︎</button>
     </header>
     <section class="status-card" id="statusCard">
       <div><span class="status-dot pending"></span><strong>Conectando</strong></div>
-      <p>Verificando OpenAI, GitHub e backend.</p>
+      <p>Verificando conexões…</p>
       <div class="activity-indicator" id="activityIndicator" hidden><span class="activity-dot" aria-hidden="true"></span><span id="activityText">Tarefa em execução remotamente</span></div>
     </section>
     <section class="card composer-card">
       <label for="projectSelect">Projeto</label><select id="projectSelect"></select>
       <label for="taskInput">O que você quer fazer?</label>
-      <textarea id="taskInput" rows="6" placeholder="Ex.: O botão de exportar não está funcionando. Descubra o problema, corrija, abra a interface e confirme visualmente sem alterar outras funções."></textarea>
+      <textarea id="taskInput" rows="3" placeholder="Ex.: corrija o botão de exportar sem alterar outras funções."></textarea>
       <div class="attachment-row"><label class="secondary-button file-button"><input id="imageInput" type="file" accept="image/*" multiple hidden>+ Adicionar print</label><span id="attachmentCount">Nenhum anexo</span></div>
-      <div class="grid-two"><div><label for="modelSelect">Modelo</label><select id="modelSelect"><option value="auto">Automático · IA escolhe</option><option value="luna">Luna · econômico</option><option value="terra">Terra · intermediário</option><option value="sol">Sol · avançado</option><option value="astra">Astra · somente manual</option></select></div><div><label for="budgetInput">Limite estimado da tarefa</label><div class="money-input"><span>R$</span><input id="budgetInput" inputmode="decimal" value="5,00"></div></div></div>
-      <button class="primary-button" id="runButton">Executar tarefa</button>
+      <div class="model-field"><label for="modelSelect">Modelo</label><select id="modelSelect"><option value="auto">Automático · IA escolhe</option><option value="luna">Luna · econômico</option><option value="terra">Terra · intermediário</option><option value="sol">Sol · avançado</option><option value="astra">Astra · somente manual</option></select></div>
+      <div class="budget-run-row"><div><label for="budgetInput">Limite estimado</label><div class="money-input"><span>R$</span><input id="budgetInput" inputmode="decimal" value="5,00"></div></div><button class="primary-button" id="runButton">Executar tarefa</button></div>
       <p class="helper" id="runHelper">Conectando ao backend…</p>
       <p class="helper">No modo Automático, Luna classifica a tarefa e escolhe entre Luna, Terra e Sol. Astra nunca é escolhido automaticamente. Depois de iniciada, a execução continua remotamente mesmo se você fechar este PWA.</p>
     </section>
@@ -43,10 +43,10 @@
     <section class="card history-card"><div class="section-heading"><h2>Histórico</h2><span>Últimas tarefas</span></div><p class="empty-state">Nenhuma tarefa executada ainda.</p></section>
   </main>
   <dialog id="settingsDialog"><div class="dialog-head"><h2>Ajustes</h2><button class="icon-button" id="closeSettings" aria-label="Fechar">×</button></div><label for="defaultProject">Projeto padrão</label><select id="defaultProject"></select><label class="toggle-row"><span>Pedir aprovação antes de publicar</span><input type="checkbox" checked disabled></label><p class="helper">Toda publicação exige sua aprovação. Em alterações visuais, use a prévia navegável temporária quando disponível para conferir outras telas e interações antes de publicar.</p></dialog>
-  <script src="./safari-recovery-v084.js?v=090"></script>
-  <script src="./app-v6.js?v=090" defer></script>
-  <script src="./cost-sync-v7.js?v=090" defer></script>
-  <script src="./visual-approval-guard-v7.js?v=090" defer></script>
-  <script src="./activity-preview-v8.js?v=090" defer></script>
+  <script src="./safari-recovery-v084.js?v=091"></script>
+  <script src="./app-v6.js?v=091" defer></script>
+  <script src="./cost-sync-v7.js?v=091" defer></script>
+  <script src="./visual-approval-guard-v7.js?v=091" defer></script>
+  <script src="./activity-preview-v8.js?v=091" defer></script>
 </body>
 </html>
