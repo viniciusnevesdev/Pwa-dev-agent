@@ -14,7 +14,7 @@ O objetivo é permitir trabalhar em vários repositórios sem precisar de comput
 
 1. Escolher um repositório.
 2. Descrever a alteração em linguagem natural.
-3. Opcionalmente anexar prints.
+3. Opcionalmente anexar até 4 prints.
 4. Escolher o modo de modelo ou deixar em Automático.
 5. O backend captura o commit atual do repositório.
 6. A OpenAI cria um sandbox hospedado e isolado.
@@ -25,16 +25,18 @@ O objetivo é permitir trabalhar em vários repositórios sem precisar de comput
 11. O usuário escolhe entre **Publicar no GitHub** ou **Descartar alterações**.
 12. Antes de publicar, o backend verifica se o repositório continua no mesmo commit inicial. Se outra alteração tiver ocorrido, a publicação é recusada para evitar sobrescrever trabalho recente.
 
+Tarefas ativas ficam salvas localmente no PWA. Se o app for fechado e aberto novamente, ele tenta retomar o acompanhamento da sessão existente.
+
 ## Modelos
 
-- **Automático:** escolhe Luna para tarefas simples e Sol para tarefas mais complexas.
-- **Econômico:** Luna.
-- **Equilibrado:** Sol.
-- **Máxima capacidade:** Astra.
+- **Automático:** escolhe Luna para alterações visuais/simples e Sol para tarefas mais complexas.
+- **Econômico:** GPT-6 Luna.
+- **Equilibrado:** GPT-6.1 Sol.
+- **Máxima capacidade:** GPT-6 Astra.
 
 O modo Automático não escolhe Astra sozinho para evitar custos altos inesperados.
 
-## Custos
+## Custos e limite por tarefa
 
 O app registra por tarefa:
 
@@ -45,7 +47,7 @@ O app registra por tarefa:
 - custo total estimado em reais;
 - média e total mensal no histórico local.
 
-O campo **Orçamento de referência** ajuda a orientar a escolha automática do modelo, mas ainda não é um bloqueio rígido de gasto durante uma execução.
+O campo de orçamento funciona também como proteção: quando a estimativa disponível para a sessão ultrapassa o valor configurado, o backend envia cancelamento para o agente. Como a telemetria de uso da Agents API é de melhor esforço e a cobrança final pode incluir detalhes não expostos em tempo real, esse limite deve ser tratado como **limite estimado**, não como garantia contábil exata.
 
 ## Segurança
 
@@ -59,6 +61,13 @@ O Cloudflare Worker recebe como Secrets:
 Para o sandbox da OpenAI, o token do GitHub é disponibilizado por um Vault da OpenAI com rede limitada a `api.github.com`.
 
 O agente não publica durante a etapa de edição. A publicação é feita pelo backend somente após aprovação explícita do usuário.
+
+O backend também:
+
+- aceita chamadas do fluxo do agente apenas com a origem esperada do GitHub Pages;
+- recusa publicação se o repositório mudou desde o início da tarefa;
+- recusa automaticamente publicações excessivamente grandes;
+- permite cancelar ou descartar uma sessão sem publicar nada.
 
 ## Backend
 
