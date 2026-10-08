@@ -10,13 +10,17 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./styles.css?v=6">
   <link rel="stylesheet" href="./visuals-v6.css?v=1">
+  <link rel="stylesheet" href="./activity-preview-v8.css?v=1">
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
         <p class="eyebrow">AGENTE PESSOAL</p>
-        <h1>Dev Agent</h1>
+        <div class="app-title-row">
+          <h1>Dev Agent</h1>
+          <span class="app-version" id="appVersion">v0.8.0</span>
+        </div>
       </div>
       <button class="icon-button" id="settingsButton" aria-label="Ajustes">⚙︎</button>
     </header>
@@ -27,6 +31,10 @@
         <strong>Conectando</strong>
       </div>
       <p>Verificando OpenAI, GitHub e backend.</p>
+      <div class="activity-indicator" id="activityIndicator" hidden>
+        <span class="activity-dot" aria-hidden="true"></span>
+        <span id="activityText">Tarefa em execução remotamente</span>
+      </div>
     </section>
 
     <section class="card composer-card">
@@ -99,11 +107,12 @@
       <span>Pedir aprovação antes de publicar</span>
       <input type="checkbox" checked disabled>
     </label>
-    <p class="helper">Toda publicação exige sua aprovação. Em alterações visuais, o Dev Agent exige que você confira a prévia final quando ela estiver disponível e avisa claramente se a validação visual não pôde ser gerada.</p>
+    <p class="helper">Toda publicação exige sua aprovação. Em alterações visuais, use a prévia navegável temporária quando disponível para conferir outras telas e interações antes de publicar.</p>
   </dialog>
 
   <script src="./app-v6.js?v=1" defer></script>
   <script src="./cost-sync-v7.js?v=1" defer></script>
-  <script src="./visual-approval-guard-v7.js?v=1" defer></script>
+  <script src="./visual-approval-guard-v7.js?v=2" defer></script>
+  <script src="./activity-preview-v8.js?v=1" defer></script>
 </body>
 </html>
