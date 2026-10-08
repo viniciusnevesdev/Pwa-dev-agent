@@ -113,6 +113,7 @@ function saveHistoryItem(item) {
 }
 
 function renderHistory() {
+  ensureHistoryDialog();
   const history = getHistory();
   const now = new Date();
   const monthly = history.filter(item => {
@@ -143,8 +144,10 @@ function renderHistory() {
   }
   list.replaceChildren();
   for (const item of history.slice(0, 10)) {
-    const row = document.createElement('div');
-    row.className = 'history-item';
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'history-item history-item-button';
+    row.addEventListener('click', () => openHistoryDetails(item));
     const left = document.createElement('div');
     const title = document.createElement('strong');
     title.textContent = item.project || 'Projeto';
@@ -156,6 +159,45 @@ function renderHistory() {
     row.append(left, cost);
     list.appendChild(row);
   }
+}
+
+function ensureHistoryDialog() {
+  let dialog = $('#historyDetailsDialog');
+  if (dialog) return dialog;
+  dialog = document.createElement('dialog');
+  dialog.id = 'historyDetailsDialog';
+  dialog.className = 'history-details-dialog';
+  dialog.innerHTML = '<div class="dialog-head"><h2>Detalhes da execução</h2><button class="icon-button" id="closeHistoryDetails" aria-label="Fechar">×</button></div><dl class="history-details" id="historyDetailsBody"></dl>';
+  document.body.appendChild(dialog);
+  dialog.querySelector('#closeHistoryDetails').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  return dialog;
+}
+
+function openHistoryDetails(item) {
+  const dialog = ensureHistoryDialog();
+  const body = dialog.querySelector('#historyDetailsBody');
+  body.replaceChildren();
+  const details = [
+    ['Projeto', item.project || '—'],
+    ['Status', item.status || '—'],
+    ['Tarefa', item.task || '—'],
+    ['Modelo', modelLabel(item.model || item.selectedModel || item.modelMode)],
+    ['Custo estimado', Number(item.costBrl) > 0 ? brl(item.costBrl) : (item.costPending ? 'calculando' : '—')],
+    ['Data', item.date ? new Date(item.date).toLocaleString('pt-BR') : '—'],
+    ['Commit', item.commitSha ? item.commitSha.slice(0, 7) : '—'],
+    ['Sessão', item.sessionId || '—']
+  ];
+  for (const [label, value] of details) {
+    const term = document.createElement('dt');
+    term.textContent = label;
+    const description = document.createElement('dd');
+    description.textContent = value;
+    const row = document.createElement('div');
+    row.append(term, description);
+    body.appendChild(row);
+  }
+  dialog.showModal();
 }
 
 function getSavedActive() {
