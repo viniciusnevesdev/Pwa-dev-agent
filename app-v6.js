@@ -407,7 +407,7 @@ async function connectBackend() {
   setStatus('Conectando', 'Verificando OpenAI, GitHub e execução remota…', 'pending');
   const saved = getSavedActive();
   if (saved) resumeSavedSession(saved);
-  else runHelper.textContent = 'Descreva a mudança e pode fechar o app depois de iniciar. A execução continua no servidor; ao voltar, o resultado é recuperado.';
+  else runHelper.textContent = '';
 
   api('/health').then(health => {
     if (!health.openaiKeyConfigured || !health.githubTokenConfigured) throw new Error('Credenciais incompletas.');
