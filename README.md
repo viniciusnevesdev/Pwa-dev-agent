@@ -4,50 +4,80 @@ Agente pessoal para criar, corrigir, testar e publicar mudanças nos meus PWAs p
 
 ## Estado atual
 
-A V1 já possui a arquitetura principal implementada:
+Arquitetura da V1:
 
-**PWA no GitHub Pages → Cloudflare Worker → OpenAI Agents API + GitHub API**
+**PWA no GitHub Pages → Cloudflare Worker + Workflow → OpenAI Agents API → GitHub API**
 
-O objetivo é permitir trabalhar em vários repositórios sem precisar de computador, terminal ou edição manual de código.
+A execução não depende de manter o PWA aberto. Depois que uma tarefa é iniciada, a sessão da OpenAI continua remotamente e um Cloudflare Workflow acompanha aprovações do navegador e o limite estimado de custo. Ao reabrir o PWA, a interface apenas recupera o estado atual da mesma tarefa.
 
 ## Fluxo de uma tarefa
 
 1. Escolher um repositório.
 2. Descrever a alteração em linguagem natural.
 3. Opcionalmente anexar até 4 prints.
-4. Escolher o modo de modelo ou deixar em Automático.
-5. O backend captura o commit atual do repositório.
-6. A OpenAI cria um sandbox hospedado e isolado.
-7. O código do repositório é carregado no sandbox no commit exato da tarefa.
-8. O agente analisa, altera e executa verificações localmente.
-9. O app mostra resumo, testes, arquivos modificados, tokens e custo estimado.
-10. Nenhuma mudança é publicada automaticamente.
-11. O usuário escolhe entre **Publicar no GitHub** ou **Descartar alterações**.
-12. Antes de publicar, o backend verifica se o repositório continua no mesmo commit inicial. Se outra alteração tiver ocorrido, a publicação é recusada para evitar sobrescrever trabalho recente.
-
-Tarefas ativas ficam salvas localmente no PWA. Se o app for fechado e aberto novamente, ele tenta retomar o acompanhamento da sessão existente.
+4. Escolher um modelo manualmente ou deixar em **Automático**.
+5. No Automático, Luna classifica a tarefa e escolhe entre Luna, Terra e Sol. Astra nunca é escolhido automaticamente.
+6. O backend captura o commit atual do repositório e cria uma sessão isolada na OpenAI.
+7. O código é carregado no sandbox no commit exato da tarefa.
+8. Para tarefas visuais, o agente pode abrir a versão publicada do PWA, observar a interface e registrar uma captura inicial.
+9. O agente analisa e altera apenas a cópia local do código.
+10. Uma versão local das alterações fica disponível para teste no ambiente hospedado.
+11. Quando útil, o agente abre essa versão, faz nova captura e compara visualmente o antes e o depois.
+12. O app mostra resumo, testes, avisos, arquivos modificados, modelo escolhido, tokens, custo estimado e capturas disponíveis.
+13. Nenhuma mudança é publicada automaticamente.
+14. O usuário escolhe **Publicar no GitHub** ou **Descartar alterações**.
+15. Antes de publicar, o backend confirma que o repositório continua no mesmo commit inicial. Se ele mudou, a publicação é recusada para evitar sobrescrever trabalho recente.
 
 ## Modelos
 
-- **Automático:** escolhe Luna para alterações visuais/simples e Sol para tarefas mais complexas.
-- **Econômico:** GPT-6 Luna.
-- **Equilibrado:** GPT-6.1 Sol.
-- **Máxima capacidade:** GPT-6 Astra.
+O seletor oferece:
 
-O modo Automático não escolhe Astra sozinho para evitar custos altos inesperados.
+- **Automático:** uma chamada econômica do Luna classifica a tarefa e escolhe Luna, Terra ou Sol.
+- **Luna:** tarefas simples e bem delimitadas.
+- **Terra:** programação comum, bugs localizados e mudanças moderadas.
+- **Sol:** debugging difícil, regressões, arquitetura, autenticação, estado ou mudanças em vários subsistemas.
+- **Astra:** exclusivamente manual para casos excepcionais.
+
+O roteador também informa se a tarefa se beneficia de validação visual. A escolha automática nunca pode selecionar Astra.
+
+## Execução em segundo plano
+
+A sessão principal roda nos servidores da OpenAI. Além disso, o Worker inicia o Workflow Cloudflare `pwa-dev-agent-monitor`, que continua ativo mesmo sem o PWA aberto. Ele verifica periodicamente:
+
+- se a sessão ainda está executando;
+- pedidos de autorização do navegador hospedado;
+- o limite estimado de custo;
+- conclusão ou falha da sessão.
+
+O frontend para de fazer consultas quando fica em segundo plano para não desperdiçar bateria/rede do iPhone. Isso não pausa a tarefa. Ao voltar ao PWA, ele consulta a sessão remota novamente.
+
+## Validação visual automática
+
+Para tarefas de interface, layout e interação, o agente recebe ferramenta de computer use com screenshots habilitados.
+
+Ele pode:
+
+- abrir o GitHub Pages público do projeto antes da alteração;
+- navegar pela interface para observar o defeito;
+- editar o código no sandbox;
+- abrir a versão local alterada;
+- comparar visualmente o resultado;
+- devolver capturas do estado inicial e final para revisão no Dev Agent.
+
+O acesso automático do navegador é restrito ao GitHub Pages do usuário e ao preview local do sandbox. Pedidos de autenticação são cancelados automaticamente. Telas que dependam de login, dados exclusivos do iPhone, IndexedDB/localStorage específico ou um estado não reproduzível ainda podem exigir um print manual do usuário.
 
 ## Custos e limite por tarefa
 
-O app registra por tarefa:
+O app estima por tarefa:
 
-- tokens utilizados;
-- modelo utilizado;
-- estimativa do custo de tokens;
-- estimativa do sandbox hospedado;
-- custo total estimado em reais;
+- tokens do modelo principal;
+- custo do roteador Luna;
+- sandbox hospedado;
+- chamadas de computer use quando detectadas;
+- total aproximado em reais;
 - média e total mensal no histórico local.
 
-O campo de orçamento funciona também como proteção: quando a estimativa disponível para a sessão ultrapassa o valor configurado, o backend envia cancelamento para o agente. Como a telemetria de uso da Agents API é de melhor esforço e a cobrança final pode incluir detalhes não expostos em tempo real, esse limite deve ser tratado como **limite estimado**, não como garantia contábil exata.
+O valor em reais é uma estimativa. O campo de limite funciona como proteção operacional: enquanto a sessão está rodando, o backend e o Workflow podem enviar cancelamento quando a estimativa disponível alcança o valor configurado. Isso não é uma garantia contábil exata da fatura final.
 
 ## Segurança
 
@@ -58,20 +88,23 @@ O Cloudflare Worker recebe como Secrets:
 - `OPENAI_API_KEY`
 - `GITHUB_TOKEN`
 
-Para o sandbox da OpenAI, o token do GitHub é disponibilizado por um Vault da OpenAI com rede limitada a `api.github.com`.
+Para o sandbox da OpenAI, o token do GitHub é disponibilizado por um Vault com rede limitada a `api.github.com`.
 
-O agente não publica durante a etapa de edição. A publicação é feita pelo backend somente após aprovação explícita do usuário.
+Outras proteções:
 
-O backend também:
-
-- aceita chamadas do fluxo do agente apenas com a origem esperada do GitHub Pages;
-- recusa publicação se o repositório mudou desde o início da tarefa;
-- recusa automaticamente publicações excessivamente grandes;
-- permite cancelar ou descartar uma sessão sem publicar nada.
+- o agente trabalha primeiro numa cópia isolada e não publica durante a edição;
+- publicação exige aprovação explícita na interface;
+- endpoints sensíveis aceitam apenas a origem esperada do GitHub Pages;
+- publicação é recusada se o HEAD do repositório mudou desde o início da tarefa;
+- publicações muito grandes são recusadas automaticamente;
+- o navegador hospedado só recebe aprovação automática para origens previamente permitidas;
+- cancelar ou descartar nunca publica as alterações.
 
 ## Backend
 
 Worker Cloudflare: `pwa-dev-agent-api`
+
+Workflow Cloudflare: `pwa-dev-agent-monitor`
 
 Endpoints principais:
 
@@ -86,4 +119,4 @@ Endpoints principais:
 
 ## Frontend
 
-O frontend é um PWA mobile-first hospedado pelo GitHub Pages. Ele lista automaticamente os repositórios disponíveis na conta configurada no backend.
+O frontend é mobile-first e hospedado pelo GitHub Pages. Ele lista automaticamente os repositórios disponíveis, mantém o identificador da tarefa ativa localmente para poder reconectá-la depois e mostra revisão visual e aprovação antes da publicação.
