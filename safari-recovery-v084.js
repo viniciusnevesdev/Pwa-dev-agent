@@ -16,6 +16,15 @@
     }
   }
 
+  // Impede que o código legado volte a registrar sw.js depois que acabamos de limpá-lo.
+  // O Dev Agent depende pouco de uso offline e, neste momento, estabilidade no Safari
+  // é mais importante do que cache persistente.
+  if ('serviceWorker' in navigator) {
+    try {
+      navigator.serviceWorker.register = async () => ({ active: null, installing: null, waiting: null, scope: location.href });
+    } catch {}
+  }
+
   // /setup-vault era executado em toda abertura apesar de o backend já garantir o
   // Vault ao iniciar uma tarefa. Evitar essa chamada deixa a abertura muito mais leve.
   window.fetch = (input, init) => {
@@ -31,10 +40,8 @@
 
   purgeLegacyPwaState();
   window.addEventListener('load', () => {
-    // O app antigo ainda pode tentar registrar sw.js no evento load. Limpamos novamente
-    // logo depois para impedir que um worker antigo volte a controlar o Safari.
-    setTimeout(purgeLegacyPwaState, 250);
-    setTimeout(purgeLegacyPwaState, 1500);
+    setTimeout(purgeLegacyPwaState, 150);
+    setTimeout(purgeLegacyPwaState, 1200);
   }, { once: true });
-  window.addEventListener('pageshow', () => setTimeout(purgeLegacyPwaState, 100));
+  window.addEventListener('pageshow', () => setTimeout(purgeLegacyPwaState, 80));
 })();
