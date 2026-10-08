@@ -56,7 +56,7 @@ runButton.addEventListener('click', () => {
     document.querySelector('#taskInput').focus();
     return;
   }
-  runHelper.textContent = 'Pedido pronto. Falta conectar o backend para executar alterações reais.';
+  runHelper.textContent = 'Backend criado. A execução automática está sendo conectada.';
 });
 
 if ('serviceWorker' in navigator) {
