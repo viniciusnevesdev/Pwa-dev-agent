@@ -1,0 +1,11 @@
+{
+  "name": "PWA Dev Agent",
+  "short_name": "Dev Agent",
+  "description": "Agente pessoal para criar, corrigir e publicar alterações nos meus PWAs.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "lang": "pt-BR"
+}
