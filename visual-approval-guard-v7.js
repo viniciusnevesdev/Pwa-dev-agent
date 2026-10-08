@@ -9,8 +9,12 @@
     );
   }
 
-  function hasAfterPreview() {
+  function hasScreenshotPreview() {
     return Boolean(activeResult?.visuals?.after?.imageUrl);
+  }
+
+  function hasNavigablePreview() {
+    return Boolean(activeResult?.previewUrl);
   }
 
   function updateVisualGate() {
@@ -33,25 +37,41 @@
       actions?.insertAdjacentElement('beforebegin', notice);
     }
 
-    if (hasAfterPreview()) {
-      notice.textContent = 'Prévia visual disponível. Confira a captura final antes de publicar.';
-      publish.dataset.visualGuard = 'ready';
+    if (hasNavigablePreview()) {
+      notice.textContent = 'Prévia navegável disponível. Abra e percorra as telas afetadas antes de publicar.';
+      publish.dataset.visualGuard = 'navigable';
+    } else if (hasScreenshotPreview()) {
+      notice.textContent = 'A prévia navegável não ficou disponível, mas existe uma captura visual final para conferência.';
+      publish.dataset.visualGuard = 'screenshot';
     } else {
-      notice.textContent = 'A alteração é visual, mas a prévia automática final não foi gerada. Publicar sem conferir a tela pode introduzir regressões.';
+      notice.textContent = 'A alteração é visual, mas nenhuma prévia final foi gerada. Publicar sem conferir a interface pode introduzir regressões.';
       publish.dataset.visualGuard = 'missing';
     }
   }
 
   document.addEventListener('click', event => {
     const button = event.target.closest?.('#publishButton');
-    if (!button || !isVisualTask() || hasAfterPreview()) return;
+    if (!button || !isVisualTask()) return;
 
-    const proceed = window.confirm(
-      'A prévia visual final não foi gerada. Isso significa que o agente não conseguiu confirmar como a tela ficou.\n\nPublicar mesmo assim?'
-    );
-    if (!proceed) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
+    if (!hasNavigablePreview() && !hasScreenshotPreview()) {
+      const proceed = window.confirm(
+        'Nenhuma prévia final foi gerada. Isso significa que o agente não conseguiu confirmar como a interface ficou.\n\nPublicar mesmo assim?'
+      );
+      if (!proceed) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      return;
+    }
+
+    if (hasNavigablePreview()) {
+      const proceed = window.confirm(
+        'Você já abriu a prévia navegável e conferiu as telas e funções importantes afetadas por esta alteração?'
+      );
+      if (!proceed) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
     }
   }, true);
 
