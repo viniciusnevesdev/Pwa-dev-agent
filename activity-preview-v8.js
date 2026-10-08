@@ -1,16 +1,31 @@
 (() => {
-  const UI_VERSION = '0.8.13';
+  const UI_VERSION = '0.8.14';
   function setTextIfChanged(node, value) { if (node && node.textContent !== value) node.textContent = value; }
   function setHiddenIfChanged(node, hidden) { if (node && node.hidden !== hidden) node.hidden = hidden; }
   function ensureVersion() { setTextIfChanged(document.querySelector('#appVersion'), `v${UI_VERSION}`); }
   function ensurePreviewBox() {
     const card = document.querySelector('#resultCard'); if (!card) return null;
     let box = document.querySelector('#navigablePreview'); if (box) return box;
-    box = document.createElement('div'); box.id = 'navigablePreview'; box.className = 'preview-helper'; box.hidden = true;
-    box.innerHTML = `<a id="previewLink" class="secondary-button preview-button" target="_blank" rel="noopener">Abrir prévia navegável</a><p class="helper">Cópia temporária: navegue antes de publicar.</p>`;
+    box = document.createElement('div'); box.id = 'navigablePreview'; box.className = 'preview-helper preview-unavailable';
+    box.innerHTML = `<button id="previewUnavailable" class="secondary-button preview-button" type="button" disabled>Abrir prévia navegável</button><a id="previewLink" class="secondary-button preview-button" target="_blank" rel="noopener" hidden>Abrir prévia navegável</a><p class="helper" id="previewHint">Toque neste botão para pré-visualizar uma tarefa recém-executada, antes de publicá-la.</p>`;
     card.querySelector('.result-actions')?.insertAdjacentElement('beforebegin', box); return box;
   }
-  function updatePreview() { const box = ensurePreviewBox(); if (!box) return; const url = activeResult?.previewUrl || null; const publish = document.querySelector('#publishButton'); const show = Boolean(url && publish && !publish.hidden); setHiddenIfChanged(box, !show); if (show) { const link = document.querySelector('#previewLink'); if (link && link.href !== url) link.href = url; } }
+  function updatePreview() {
+    const box = ensurePreviewBox(); if (!box) return;
+    const url = activeResult?.previewUrl || null;
+    const publish = document.querySelector('#publishButton');
+    const available = Boolean(url && publish && !publish.hidden);
+    const unavailable = document.querySelector('#previewUnavailable');
+    const link = document.querySelector('#previewLink');
+    const hint = document.querySelector('#previewHint');
+    setHiddenIfChanged(unavailable, available);
+    setHiddenIfChanged(link, !available);
+    box.classList.toggle('preview-unavailable', !available);
+    if (available) {
+      if (link && link.href !== url) link.href = url;
+      setTextIfChanged(hint, 'Cópia temporária: navegue antes de publicar.');
+    } else setTextIfChanged(hint, 'Toque neste botão para pré-visualizar uma tarefa recém-executada, antes de publicá-la.');
+  }
   function updateActivity() {
     const indicator = document.querySelector('#activityIndicator'); if (!indicator) return;
     const state = window.devAgentActivityState || 'idle';
