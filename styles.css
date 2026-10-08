@@ -12,3 +12,6 @@
 
 /* Controles compactos do formulário v0.8.19 */
 .model-field select,.budget-run-row .money-input,.budget-run-row .primary-button{height:44px;min-height:44px;font-size:14px}.model-field select{padding:0 12px}.budget-run-row .money-input{padding:0 12px;gap:6px}.budget-run-row .primary-button{padding:0 14px;font-size:14px}
+
+/* Seletor de projeto compacto v0.8.20 */
+.composer-card>#projectSelect{height:44px;font-size:14px;padding:0 12px}
