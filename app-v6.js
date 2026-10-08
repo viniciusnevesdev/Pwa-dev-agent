@@ -13,6 +13,7 @@ let remoteActivityConfirmed = false;
 let pollInFlight = false;
 let publishInFlight = false;
 window.devAgentRemoteActivity = false;
+window.devAgentActivityState = 'idle';
 
 const $ = selector => document.querySelector(selector);
 const projectSelect = $('#projectSelect');
@@ -82,10 +83,15 @@ function setBusy(busy) {
   budgetInput.disabled = busy;
 }
 
-function setRemoteActivity(active) {
-  remoteActivityConfirmed = Boolean(active);
+function setActivityState(state) {
+  window.devAgentActivityState = state;
+  remoteActivityConfirmed = state === 'running';
   window.devAgentRemoteActivity = remoteActivityConfirmed;
   document.dispatchEvent(new CustomEvent('devagent:state'));
+}
+
+function setRemoteActivity(active) {
+  setActivityState(active ? 'running' : 'idle');
 }
 
 function isTerminalStatus(status) {
@@ -517,6 +523,7 @@ async function pollStatus(immediate = false) {
         task: activeMeta?.task || taskInput.value.trim(), model: data.model, costBrl: Number(cost) > 0 ? Number(cost) : null, costPending: Number(cost) <= 0,
         status: changes.length ? 'aguardando publicação' : 'concluída'
       });
+      setActivityState('completed');
       showResult({
         badge: changes.length ? 'Pronto para revisar' : 'Concluído', summary, meta,
         files: changes.slice(0, 50), visuals: data.visuals, publish: changes.length > 0, discard: true
@@ -534,6 +541,7 @@ async function pollStatus(immediate = false) {
         saveHistoryItem({ sessionId: activeSessionId, date: new Date().toISOString(), project: data.project || activeMeta?.project, task: activeMeta?.task || taskInput.value.trim(), model: data.model, costBrl: Number(cost) > 0 ? Number(cost) : null, costPending: Number(cost) <= 0, status: 'sessão concluída sem resultado' });
         showResult({ badge: 'Sessão concluída', summary: data.finalText || 'A sessão remota terminou sem devolver um pacote publicável. Nada foi publicado.', meta, visuals: data.visuals });
         clearActive();
+        setActivityState('completed');
         runHelper.textContent = 'A sessão antiga foi removida deste aparelho. Você pode iniciar outra tarefa.';
         return;
       }
