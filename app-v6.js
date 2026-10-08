@@ -243,10 +243,10 @@ function ensureResultCard() {
   card = document.createElement('section');
   card.id = 'resultCard';
   card.className = 'card result-card';
-  card.hidden = true;
+  card.hidden = false;
   card.innerHTML = `
-    <div class="section-heading"><h2>Resultado</h2><span id="resultBadge">Aguardando</span></div>
-    <p class="result-summary" id="resultSummary"></p>
+    <div class="section-heading"><h2>Resultado</h2><span id="resultBadge"></span></div>
+    <p class="result-summary" id="resultSummary">Quando uma tarefa for terminada, aqui aparecerá o resumo do resultado dela.</p>
     <div class="result-meta" id="resultMeta"></div>
     <div class="visual-review" id="visualReview" hidden></div>
     <div class="result-files" id="resultFiles"></div>
@@ -260,6 +260,25 @@ function ensureResultCard() {
   $('#discardButton').addEventListener('click', discardCurrent);
   $('#cancelButton').addEventListener('click', cancelCurrent);
   return card;
+}
+
+
+function showEmptyResult() {
+  const card = ensureResultCard();
+  card.hidden = false;
+  $('#resultBadge').textContent = '';
+  $('#resultSummary').textContent = 'Quando uma tarefa for terminada, aqui aparecerá o resumo do resultado dela.';
+  $('#resultMeta').replaceChildren();
+  $('#resultFiles').replaceChildren();
+  renderVisuals(null);
+  const publishButton = $('#publishButton');
+  publishButton.hidden = true;
+  publishButton.disabled = false;
+  publishButton.textContent = 'Publicar no GitHub';
+  publishButton.classList.remove('is-published');
+  $('#discardButton').hidden = true;
+  $('#cancelButton').hidden = true;
+  document.dispatchEvent(new CustomEvent('devagent:state'));
 }
 
 function routingMeta(routing, fallbackModel) {
@@ -618,6 +637,7 @@ async function publishCurrent() {
     runHelper.textContent = 'Publicado com sucesso. O GitHub Pages pode levar alguns segundos para atualizar.';
     clearActive();
     setActivityState('published');
+    showEmptyResult();
     setBusy(false);
     imageInput.value = '';
     attachmentCount.textContent = 'Nenhum anexo';
@@ -673,7 +693,7 @@ fillProjects(projectSelect);
 fillProjects(defaultProject);
 applySavedDefault();
 renderHistory();
-ensureResultCard();
+showEmptyResult();
 
 defaultProject.addEventListener('change', () => {
   localStorage.setItem('dev-agent-default-project', defaultProject.value);
