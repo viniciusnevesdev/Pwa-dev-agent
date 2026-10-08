@@ -250,7 +250,7 @@ function renderVisuals(visuals) {
   node.appendChild(grid);
 }
 
-function showResult({ badge, summary, meta = [], files = [], visuals = null, publish = false, discard = false, cancel = false }) {
+function showResult({ badge, summary, meta = [], files = [], visuals = null, publish = false, discard = false, cancel = false, published = false }) {
   const card = ensureResultCard();
   card.hidden = false;
   $('#resultBadge').textContent = badge || '';
@@ -270,7 +270,11 @@ function showResult({ badge, summary, meta = [], files = [], visuals = null, pub
     row.textContent = `${file.action || 'alterado'} · ${file.path}`;
     filesNode.appendChild(row);
   }
-  $('#publishButton').hidden = !publish;
+  const publishButton = $('#publishButton');
+  publishButton.hidden = !publish && !published;
+  publishButton.disabled = published;
+  publishButton.textContent = published ? '✓ Publicado' : 'Publicar no GitHub';
+  publishButton.classList.toggle('is-published', published);
   $('#discardButton').hidden = !discard;
   $('#cancelButton').hidden = !cancel;
   document.dispatchEvent(new CustomEvent('devagent:state'));
@@ -546,7 +550,7 @@ async function publishCurrent() {
     const published = await api('/agent/publish', { method: 'POST', body: JSON.stringify({ sessionId: activeSessionId }) });
     const costBrl = Number(activeResult.cost?.minimumTotalBrl || 0);
     saveHistoryItem({ sessionId: activeSessionId, date: new Date().toISOString(), project: activeResult.project || activeMeta?.project, task: activeMeta?.task, model: activeResult.model, costBrl, status: 'publicada', commitSha: published.commitSha || null });
-    showResult({ badge: 'Publicado', summary: published.summary || 'Alterações publicadas no GitHub.', meta: [`${published.changedCount || changes.length} arquivos`, published.commitSha ? `commit ${published.commitSha.slice(0, 7)}` : '', costBrl ? brl(costBrl) : ''], visuals: activeResult.visuals });
+    showResult({ badge: 'Publicado', summary: published.summary || 'Alterações publicadas no GitHub.', meta: [`${published.changedCount || changes.length} arquivos`, published.commitSha ? `commit ${published.commitSha.slice(0, 7)}` : '', costBrl ? brl(costBrl) : ''], visuals: activeResult.visuals, published: true });
     runHelper.textContent = 'Publicado com sucesso. O GitHub Pages pode levar alguns segundos para atualizar.';
     clearActive();
     setBusy(false);
