@@ -52,27 +52,9 @@
   document.addEventListener('click', event => {
     const button = event.target.closest?.('#publishButton');
     if (!button || !isVisualTask()) return;
-
-    if (!hasNavigablePreview() && !hasScreenshotPreview()) {
-      const proceed = window.confirm(
-        'Nenhuma prévia final foi gerada. Isso significa que o agente não conseguiu confirmar como a interface ficou.\n\nPublicar mesmo assim?'
-      );
-      if (!proceed) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-      return;
-    }
-
-    if (hasNavigablePreview()) {
-      const proceed = window.confirm(
-        'Você já abriu a prévia navegável e conferiu as telas e funções importantes afetadas por esta alteração?'
-      );
-      if (!proceed) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    }
+    // O próprio clique no botão com o rótulo explícito é a aprovação. Alertas nativos
+    // podiam ficar invisíveis no Safari/PWA e davam a impressão de que nada aconteceu.
+    // O aviso continua visível acima do botão para orientar a revisão antes do clique.
   }, true);
 
   document.addEventListener('devagent:state', updateVisualGate);
