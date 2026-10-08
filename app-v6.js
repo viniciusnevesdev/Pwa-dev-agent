@@ -1,6 +1,7 @@
 const API_BASE = 'https://pwa-dev-agent-api.viniciusnevez123.workers.dev';
 const ACTIVE_KEY = 'dev-agent-active-session-v2';
 const HISTORY_KEY = 'dev-agent-history';
+const ACTIVITY_KEY = 'dev-agent-activity-status-v1';
 
 let projects = ['Painel','Registro-mental-v1','cronometro-app','crono-app','Controle-financeiro','Html-e-css-creator','Menu','Simbolos'];
 let activeSessionId = null;
@@ -13,7 +14,13 @@ let remoteActivityConfirmed = false;
 let pollInFlight = false;
 let publishInFlight = false;
 window.devAgentRemoteActivity = false;
-window.devAgentActivityState = 'idle';
+function getSavedActivityState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ACTIVITY_KEY) || 'null');
+    return typeof saved?.state === 'string' ? saved.state : 'idle';
+  } catch { return 'idle'; }
+}
+window.devAgentActivityState = getSavedActivityState();
 
 const $ = selector => document.querySelector(selector);
 const projectSelect = $('#projectSelect');
@@ -87,6 +94,7 @@ function setActivityState(state) {
   window.devAgentActivityState = state;
   remoteActivityConfirmed = state === 'running';
   window.devAgentRemoteActivity = remoteActivityConfirmed;
+  localStorage.setItem(ACTIVITY_KEY, JSON.stringify({ state, updatedAt: new Date().toISOString() }));
   document.dispatchEvent(new CustomEvent('devagent:state'));
 }
 
@@ -410,7 +418,7 @@ async function resumeSavedSession(saved) {
   if (saved.modelMode) modelSelect.value = saved.modelMode;
   if (saved.budgetBrl) budgetInput.value = Number(saved.budgetBrl).toFixed(2).replace('.', ',');
   setBusy(true);
-  setRemoteActivity(false);
+  setActivityState('checking');
   showResult({
     badge: 'Recuperando',
     summary: `A tarefa em ${saved.project || 'seu projeto'} continuou remotamente. Consultando o estado atual…`,
@@ -433,6 +441,7 @@ async function runTask() {
   }
 
   setBusy(true);
+  setActivityState('preparing');
   showResult({ badge: 'Classificando', summary: 'Luna está avaliando a complexidade e preparando a execução remota.' });
   runHelper.textContent = 'Preparando agente, repositório e ambiente de teste…';
 
@@ -460,6 +469,7 @@ async function runTask() {
       startedAt: new Date().toISOString()
     };
     saveActive(meta);
+    setActivityState('checking');
     showResult({
       badge: 'Executando remotamente',
       summary: `O agente está trabalhando em ${started.project}. Você pode fechar este PWA e usar o iPhone normalmente.`,
@@ -471,6 +481,7 @@ async function runTask() {
   } catch (error) {
     setBusy(false);
     clearActive();
+    setActivityState('failed');
     showResult({ badge: 'Erro', summary: error.message || 'Não foi possível iniciar a tarefa.' });
     runHelper.textContent = 'A tarefa não foi iniciada.';
   }
@@ -499,6 +510,7 @@ async function pollStatus(immediate = false) {
 
     if (normalizedStatus === 'failed' || normalizedStatus === 'error') {
       setBusy(false);
+      setActivityState('failed');
       saveHistoryItem({
         sessionId: activeSessionId, date: new Date().toISOString(), project: data.project || activeMeta?.project,
         task: activeMeta?.task || taskInput.value.trim(), model: data.model, costBrl: Number(cost) > 0 ? Number(cost) : null, costPending: Number(cost) <= 0, status: 'falhou'
@@ -523,7 +535,7 @@ async function pollStatus(immediate = false) {
         task: activeMeta?.task || taskInput.value.trim(), model: data.model, costBrl: Number(cost) > 0 ? Number(cost) : null, costPending: Number(cost) <= 0,
         status: changes.length ? 'aguardando publicação' : 'concluída'
       });
-      setActivityState('completed');
+      setActivityState(changes.length ? 'review' : 'completed');
       showResult({
         badge: changes.length ? 'Pronto para revisar' : 'Concluído', summary, meta,
         files: changes.slice(0, 50), visuals: data.visuals, publish: changes.length > 0, discard: true
@@ -558,12 +570,13 @@ async function pollStatus(immediate = false) {
     if (error.status === 404) {
       setBusy(false);
       clearActive();
+      setActivityState('missing');
       showResult({ badge: 'Sessão encerrada', summary: 'A tarefa anterior não existe mais no servidor.' });
       runHelper.textContent = 'Você pode iniciar outra tarefa.';
       return;
     }
     consecutiveStatusFailures += 1;
-    setRemoteActivity(false);
+    setActivityState('checking');
     if (consecutiveStatusFailures >= 3) {
       setBusy(false);
       showResult({ badge: 'Não foi possível confirmar', summary: 'Não consegui confirmar se a sessão antiga ainda existe. O indicador de atividade foi desligado para não mostrar trabalho que talvez já tenha terminado.', discard: true });
@@ -586,6 +599,7 @@ async function publishCurrent() {
   const changes = activeResult.result?.changes || [];
   const button = $('#publishButton');
   publishInFlight = true;
+  setActivityState('publishing');
   button.disabled = true;
   button.textContent = 'Publicando…';
   $('#discardButton').disabled = true;
@@ -603,10 +617,12 @@ async function publishCurrent() {
     showResult({ badge: 'Publicado', summary: published.summary || 'Alterações publicadas no GitHub.', meta: [`${published.changedCount || changes.length} arquivos`, published.commitSha ? `commit ${published.commitSha.slice(0, 7)}` : '', costBrl ? brl(costBrl) : ''], visuals: activeResult.visuals, published: true });
     runHelper.textContent = 'Publicado com sucesso. O GitHub Pages pode levar alguns segundos para atualizar.';
     clearActive();
+    setActivityState('published');
     setBusy(false);
     imageInput.value = '';
     attachmentCount.textContent = 'Nenhum anexo';
   } catch (error) {
+    setActivityState('review');
     showResult({ badge: 'Não foi publicado', summary: error.message || 'Não foi possível publicar. Nenhuma alteração foi enviada ao GitHub.', files: changes.slice(0, 50), visuals: activeResult.visuals, publish: true, discard: true });
     button.disabled = false;
     button.textContent = 'Publicar no GitHub';
@@ -632,6 +648,7 @@ async function discardCurrent() {
     if (existing) saveHistoryItem({ ...existing, status: 'descartada' });
     showResult({ badge: 'Descartado', summary: 'A sessão foi encerrada e nada foi publicado.' });
     clearActive();
+    setActivityState('discarded');
     setBusy(false);
     imageInput.value = '';
     attachmentCount.textContent = 'Nenhum anexo';
@@ -647,7 +664,7 @@ async function cancelCurrent() {
   if (!activeSessionId || !window.confirm('Cancelar a tarefa atual? Nenhuma alteração será publicada.')) return;
   try { await api('/agent/cancel', { method: 'POST', body: JSON.stringify({ sessionId: activeSessionId }) }); } catch {}
   showResult({ badge: 'Cancelando', summary: 'O pedido de cancelamento foi enviado ao agente remoto.', discard: true });
-  setRemoteActivity(false);
+  setActivityState('cancelling');
   runHelper.textContent = 'O monitor remoto continuará acompanhando até a sessão parar.';
   pollTimer = setTimeout(() => pollStatus(true), 2500);
 }
