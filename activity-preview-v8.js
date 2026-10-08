@@ -1,5 +1,5 @@
 (() => {
-  const UI_VERSION = '0.8.0';
+  const UI_VERSION = '0.8.1';
 
   function ensureVersion() {
     const target = document.querySelector('#appVersion');
