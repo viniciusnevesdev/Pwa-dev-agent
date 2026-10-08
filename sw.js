@@ -1,5 +1,5 @@
-const CACHE = 'dev-agent-v6';
-const ASSETS = ['./','./index.html','./styles.css?v=6','./visuals-v6.css?v=1','./app-v6.js?v=1','./manifest.webmanifest'];
+const CACHE = 'dev-agent-v7';
+const ASSETS = ['./','./index.html','./styles.css?v=6','./visuals-v6.css?v=1','./app-v6.js?v=1','./cost-sync-v7.js?v=1','./manifest.webmanifest'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
