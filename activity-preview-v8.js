@@ -1,5 +1,5 @@
 (() => {
-  const UI_VERSION = '0.8.2';
+  const UI_VERSION = '0.8.3';
 
   function setTextIfChanged(node, value) {
     if (node && node.textContent !== value) node.textContent = value;
@@ -62,9 +62,6 @@
     updatePreview();
   }
 
-  // Não observa a árvore inteira do documento. A versão anterior reagia às próprias
-  // alterações de texto/DOM e podia criar um ciclo contínuo de repintura no Safari iOS.
-  // Uma atualização leve e espaçada é suficiente para esses elementos auxiliares.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') setTimeout(refresh, 80);
   });
