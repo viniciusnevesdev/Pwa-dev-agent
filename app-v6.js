@@ -11,6 +11,7 @@ let idleWithoutResultPolls = 0;
 let consecutiveStatusFailures = 0;
 let remoteActivityConfirmed = false;
 let pollInFlight = false;
+let publishInFlight = false;
 window.devAgentRemoteActivity = false;
 
 const $ = selector => document.querySelector(selector);
@@ -523,12 +524,24 @@ async function pollStatus(immediate = false) {
 }
 
 async function publishCurrent() {
-  if (!activeSessionId || !activeResult) return;
+  if (publishInFlight) return;
+  if (!activeSessionId || !activeResult) {
+    showResult({ badge: 'Publicação indisponível', summary: 'Não encontrei a revisão desta tarefa neste aparelho. Atualize a tela para consultar o estado remoto novamente.' });
+    return;
+  }
   const changes = activeResult.result?.changes || [];
-  if (!window.confirm(`Publicar ${changes.length} arquivo${changes.length === 1 ? '' : 's'} em ${activeResult.project}?`)) return;
   const button = $('#publishButton');
+  publishInFlight = true;
   button.disabled = true;
   button.textContent = 'Publicando…';
+  $('#discardButton').disabled = true;
+  $('#cancelButton').disabled = true;
+  showResult({
+    badge: 'Publicando no GitHub',
+    summary: `Criando o commit com ${changes.length} arquivo${changes.length === 1 ? '' : 's'} em ${activeResult.project}. Não feche esta tela até aparecer a confirmação.`,
+    meta: [`${changes.length} arquivos`, 'confirmando commit e branch'],
+    files: changes.slice(0, 50), visuals: activeResult.visuals
+  });
   try {
     const published = await api('/agent/publish', { method: 'POST', body: JSON.stringify({ sessionId: activeSessionId }) });
     const costBrl = Number(activeResult.cost?.minimumTotalBrl || 0);
@@ -540,9 +553,16 @@ async function publishCurrent() {
     imageInput.value = '';
     attachmentCount.textContent = 'Nenhum anexo';
   } catch (error) {
+    showResult({ badge: 'Não foi publicado', summary: error.message || 'Não foi possível publicar. Nenhuma alteração foi enviada ao GitHub.', files: changes.slice(0, 50), visuals: activeResult.visuals, publish: true, discard: true });
     button.disabled = false;
     button.textContent = 'Publicar no GitHub';
     runHelper.textContent = error.message || 'Não foi possível publicar.';
+  } finally {
+    publishInFlight = false;
+    const retryButton = $('#publishButton');
+    if (retryButton && !retryButton.hidden) retryButton.disabled = false;
+    const discardButton = $('#discardButton');
+    if (discardButton && !discardButton.hidden) discardButton.disabled = false;
   }
 }
 
