@@ -237,7 +237,8 @@ async function connectBackend() {
   try {
     const [health, repos] = await Promise.all([
       api('/health'),
-      api('/repos')
+      api('/repos'),
+      api('/setup-vault', { method: 'POST', body: '{}' })
     ]);
     if (!health.openaiKeyConfigured || !health.githubTokenConfigured) {
       throw new Error('Credenciais incompletas.');
@@ -311,7 +312,7 @@ async function runTask() {
     showResult({
       badge: 'Executando',
       summary: `Agente trabalhando em ${started.project}.`,
-      meta: [started.model, `limite informado ${brl(started.budgetBrl)}`],
+      meta: [started.model, `orçamento de referência ${brl(started.budgetBrl)}`],
       cancel: true
     });
     runHelper.textContent = 'Pode levar alguns minutos. Você pode deixar esta tela aberta.';
@@ -359,6 +360,18 @@ async function pollStatus() {
       if (tests.length) summary += ` Testes: ${tests.join('; ')}.`;
       if (warnings.length) summary += ` Atenção: ${warnings.join('; ')}.`;
 
+      if (!getHistory().some(item => item.sessionId === activeSessionId)) {
+        saveHistoryItem({
+          sessionId: activeSessionId,
+          date: new Date().toISOString(),
+          project: data.project,
+          task: taskInput.value.trim(),
+          model: data.model,
+          costBrl: Number(data.cost?.minimumTotalBrl || 0),
+          status: 'concluída'
+        });
+      }
+
       showResult({
         badge: changes.length ? 'Pronto para revisar' : 'Concluído',
         summary,
@@ -405,14 +418,6 @@ async function publishCurrent() {
     });
 
     const costBrl = Number(activeResult.cost?.minimumTotalBrl || 0);
-    saveHistoryItem({
-      date: new Date().toISOString(),
-      project: activeResult.project,
-      task: taskInput.value.trim(),
-      model: activeResult.model,
-      costBrl,
-      commitSha: published.commitSha || null
-    });
 
     showResult({
       badge: 'Publicado',
