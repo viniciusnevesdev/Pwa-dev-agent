@@ -1,9 +1,16 @@
 (() => {
-  const UI_VERSION = '0.8.1';
+  const UI_VERSION = '0.8.2';
+
+  function setTextIfChanged(node, value) {
+    if (node && node.textContent !== value) node.textContent = value;
+  }
+
+  function setHiddenIfChanged(node, hidden) {
+    if (node && node.hidden !== hidden) node.hidden = hidden;
+  }
 
   function ensureVersion() {
-    const target = document.querySelector('#appVersion');
-    if (target) target.textContent = `v${UI_VERSION}`;
+    setTextIfChanged(document.querySelector('#appVersion'), `v${UI_VERSION}`);
   }
 
   function ensurePreviewBox() {
@@ -32,25 +39,21 @@
     if (!box) return;
     const url = currentPreviewUrl();
     const publish = document.querySelector('#publishButton');
-    if (!url || !publish || publish.hidden) {
-      box.hidden = true;
-      return;
-    }
+    const shouldShow = Boolean(url && publish && !publish.hidden);
+    setHiddenIfChanged(box, !shouldShow);
+    if (!shouldShow) return;
     const link = document.querySelector('#previewLink');
-    link.href = url;
-    box.hidden = false;
+    if (link && link.href !== url) link.href = url;
   }
 
   function updateActivity() {
     const indicator = document.querySelector('#activityIndicator');
     if (!indicator) return;
     const running = Boolean(activeSessionId && runButton?.disabled);
-    indicator.hidden = !running;
-    const text = document.querySelector('#activityText');
-    if (running && text) {
-      const badge = document.querySelector('#resultBadge')?.textContent?.trim();
-      text.textContent = badge || 'Tarefa em execução remotamente';
-    }
+    setHiddenIfChanged(indicator, !running);
+    if (!running) return;
+    const badge = document.querySelector('#resultBadge')?.textContent?.trim();
+    setTextIfChanged(document.querySelector('#activityText'), badge || 'Tarefa em execução remotamente');
   }
 
   function refresh() {
@@ -59,12 +62,14 @@
     updatePreview();
   }
 
-  const observer = new MutationObserver(refresh);
-  observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'disabled'] });
+  // Não observa a árvore inteira do documento. A versão anterior reagia às próprias
+  // alterações de texto/DOM e podia criar um ciclo contínuo de repintura no Safari iOS.
+  // Uma atualização leve e espaçada é suficiente para esses elementos auxiliares.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') setTimeout(refresh, 100);
+    if (document.visibilityState === 'visible') setTimeout(refresh, 80);
   });
   window.addEventListener('pageshow', refresh);
-  setInterval(refresh, 1200);
+  window.addEventListener('focus', refresh);
+  setInterval(refresh, 1800);
   refresh();
 })();
