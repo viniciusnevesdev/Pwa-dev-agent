@@ -37,9 +37,13 @@
           task: activeMeta?.task || existing?.task || taskInput.value.trim(),
           model: data.model || existing?.model,
           costBrl: Math.max(Number(existing?.costBrl || 0), costBrl),
+          costPending: false,
           status: existing?.status || ((data.result?.changes || []).length ? 'aguardando publicação' : 'concluída')
         });
         updateVisibleCost(costBrl);
+      } else {
+        const existing = getHistory().find(item => item.sessionId === sessionId);
+        if (existing) saveHistoryItem({ ...existing, costBrl: Number(existing.costBrl) > 0 ? existing.costBrl : null, costPending: true });
       }
 
       // Em uma sessão já encerrada, usage.total_tokens indica que a telemetria final chegou.
@@ -53,7 +57,7 @@
 
   // A Agents API pode disponibilizar o resultado alguns segundos antes da telemetria final de custo.
   // Fazemos uma segunda sincronização leve enquanto a tarefa aguarda aprovação.
-  setInterval(syncFinalCost, 2500);
+  setInterval(syncFinalCost, 4000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') syncFinalCost();
   });
