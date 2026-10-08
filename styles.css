@@ -15,3 +15,14 @@
 
 /* Seletor de projeto compacto v0.8.20 */
 .composer-card>#projectSelect{height:44px;font-size:14px;padding:0 12px}
+
+
+/* Alinhamentos do formulário e custos v0.8.22 */
+.stats-grid div{align-items:center;text-align:center}
+.composer-card label[for="projectSelect"],
+.composer-card label[for="taskInput"],
+.composer-card label[for="modelSelect"]{width:100%;text-align:center}
+.budget-run-row>div>label{text-align:center}
+.result-card .section-heading{display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline}
+.result-card .section-heading h2{grid-column:2}
+.result-card .section-heading span{grid-column:3;justify-self:end}
