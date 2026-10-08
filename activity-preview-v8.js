@@ -1,5 +1,5 @@
 (() => {
-  const UI_VERSION = '0.8.11';
+  const UI_VERSION = '0.8.12';
   function setTextIfChanged(node, value) { if (node && node.textContent !== value) node.textContent = value; }
   function setHiddenIfChanged(node, hidden) { if (node && node.hidden !== hidden) node.hidden = hidden; }
   function ensureVersion() { setTextIfChanged(document.querySelector('#appVersion'), `v${UI_VERSION}`); }
@@ -11,7 +11,14 @@
     card.querySelector('.result-actions')?.insertAdjacentElement('beforebegin', box); return box;
   }
   function updatePreview() { const box = ensurePreviewBox(); if (!box) return; const url = activeResult?.previewUrl || null; const publish = document.querySelector('#publishButton'); const show = Boolean(url && publish && !publish.hidden); setHiddenIfChanged(box, !show); if (show) { const link = document.querySelector('#previewLink'); if (link && link.href !== url) link.href = url; } }
-  function updateActivity() { const indicator = document.querySelector('#activityIndicator'); if (!indicator) return; const running = Boolean(activeSessionId && window.devAgentRemoteActivity); setHiddenIfChanged(indicator, !running); if (running) setTextIfChanged(document.querySelector('#activityText'), document.querySelector('#resultBadge')?.textContent?.trim() || 'Tarefa em execução remotamente'); }
+  function updateActivity() {
+    const indicator = document.querySelector('#activityIndicator'); if (!indicator) return;
+    const state = window.devAgentActivityState || 'idle';
+    const visible = state === 'running' || state === 'completed';
+    setHiddenIfChanged(indicator, !visible);
+    indicator.classList.toggle('activity-completed', state === 'completed');
+    if (visible) setTextIfChanged(document.querySelector('#activityText'), state === 'completed' ? 'Tarefa concluída' : 'Executando remotamente');
+  }
   function refresh() { ensureVersion(); updateActivity(); updatePreview(); }
   document.addEventListener('devagent:state', refresh);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(refresh, 80); });
