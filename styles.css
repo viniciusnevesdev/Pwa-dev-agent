@@ -9,3 +9,6 @@
 
 /* Ação abortiva v0.8.15 */
 #cancelButton:not([hidden]){background:linear-gradient(135deg,#8f2636,#c43d50);border:1px solid #f06b7b;color:#fff;box-shadow:0 8px 20px rgba(196,61,80,.22)}#cancelButton:not([hidden]):active{background:#a92f43}#cancelButton:not([hidden]):disabled{opacity:.55;box-shadow:none}
+
+/* Controles compactos do formulário v0.8.19 */
+.model-field select,.budget-run-row .money-input,.budget-run-row .primary-button{height:44px;min-height:44px;font-size:14px}.model-field select{padding:0 12px}.budget-run-row .money-input{padding:0 12px;gap:6px}.budget-run-row .primary-button{padding:0 14px;font-size:14px}
