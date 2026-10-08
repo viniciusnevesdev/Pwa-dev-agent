@@ -1,5 +1,5 @@
 (() => {
-  const UI_VERSION = '0.8.21';
+  const UI_VERSION = '0.8.22';
   function setTextIfChanged(node, value) { if (node && node.textContent !== value) node.textContent = value; }
   function setHiddenIfChanged(node, hidden) { if (node && node.hidden !== hidden) node.hidden = hidden; }
   function ensureVersion() { setTextIfChanged(document.querySelector('#appVersion'), `v${UI_VERSION}`); }
