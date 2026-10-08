@@ -167,6 +167,12 @@ function ensureResultCard() {
   const actions = document.createElement('div');
   actions.className = 'result-actions';
 
+  const discard = document.createElement('button');
+  discard.id = 'discardButton';
+  discard.className = 'secondary-button';
+  discard.textContent = 'Descartar alterações';
+  discard.hidden = true;
+
   const publish = document.createElement('button');
   publish.id = 'publishButton';
   publish.className = 'primary-button';
@@ -179,16 +185,17 @@ function ensureResultCard() {
   cancel.textContent = 'Cancelar tarefa';
   cancel.hidden = true;
 
-  actions.append(cancel, publish);
+  actions.append(cancel, discard, publish);
   card.append(heading, summary, meta, files, actions);
   document.querySelector('.composer-card').insertAdjacentElement('afterend', card);
 
   publish.addEventListener('click', publishCurrent);
+  discard.addEventListener('click', discardCurrent);
   cancel.addEventListener('click', cancelCurrent);
   return card;
 }
 
-function showResult({ badge, summary, meta = [], files = [], publish = false, cancel = false }) {
+function showResult({ badge, summary, meta = [], files = [], publish = false, discard = false, cancel = false }) {
   const card = ensureResultCard();
   card.hidden = false;
   document.querySelector('#resultBadge').textContent = badge || '';
@@ -211,6 +218,7 @@ function showResult({ badge, summary, meta = [], files = [], publish = false, ca
   }
 
   document.querySelector('#publishButton').hidden = !publish;
+  document.querySelector('#discardButton').hidden = !discard;
   document.querySelector('#cancelButton').hidden = !cancel;
 }
 
@@ -378,10 +386,11 @@ async function pollStatus() {
         meta: [...meta, `${changes.length} arquivo${changes.length === 1 ? '' : 's'} alterado${changes.length === 1 ? '' : 's'}`],
         files: changes.slice(0, 30),
         publish: changes.length > 0,
+        discard: changes.length > 0,
         cancel: false
       });
       runHelper.textContent = changes.length
-        ? 'Nada foi publicado ainda. Revise o resumo e toque em Publicar no GitHub quando quiser.'
+        ? 'Nada foi publicado ainda. Você pode publicar ou descartar as alterações.'
         : 'O agente terminou sem precisar modificar arquivos.';
       return;
     }
@@ -437,6 +446,39 @@ async function publishCurrent() {
     button.disabled = false;
     button.textContent = 'Publicar no GitHub';
     runHelper.textContent = error.message || 'Não foi possível publicar.';
+  }
+}
+
+async function discardCurrent() {
+  if (!activeSessionId || !activeResult) return;
+  const changes = activeResult.result?.changes || [];
+  const ok = window.confirm(
+    `Descartar ${changes.length} arquivo${changes.length === 1 ? '' : 's'} alterado${changes.length === 1 ? '' : 's'}? Nada será publicado.`
+  );
+  if (!ok) return;
+
+  const button = document.querySelector('#discardButton');
+  button.disabled = true;
+  button.textContent = 'Descartando…';
+
+  try {
+    await api('/agent/discard', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId: activeSessionId })
+    });
+    showResult({
+      badge: 'Descartado',
+      summary: 'As alterações foram descartadas e nada foi publicado no GitHub.'
+    });
+    runHelper.textContent = 'Sessão encerrada. Você pode executar outra tarefa.';
+    activeSessionId = null;
+    activeResult = null;
+    imageInput.value = '';
+    attachmentCount.textContent = 'Nenhum anexo';
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = 'Descartar alterações';
+    runHelper.textContent = error.message || 'Não foi possível descartar a sessão.';
   }
 }
 
