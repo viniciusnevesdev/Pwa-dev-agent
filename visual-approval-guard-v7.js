@@ -75,10 +75,9 @@
     }
   }, true);
 
-  const observer = new MutationObserver(updateVisualGate);
-  observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
+  document.addEventListener('devagent:state', updateVisualGate);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') setTimeout(updateVisualGate, 100);
   });
-  setInterval(updateVisualGate, 1500);
+  window.addEventListener('pageshow', updateVisualGate);
 })();
